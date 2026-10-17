@@ -182,32 +182,39 @@ pub(super) fn inspection_arguments<'a>(
     context: crate::pretool::PathContext<'_>,
 ) -> Option<&'a [String]> {
     let remaining = routed(arguments, context, true)?;
-    matches!(
-        remaining.first().map(String::as_str),
-        Some(
-            "status"
-                | "diff"
-                | "log"
-                | "show"
-                | "branch"
-                | "tag"
-                | "clean"
-                | "hash-object"
-                | "rev-parse"
-                | "merge-base"
-                | "ls-files"
-                | "remote"
-                | "worktree"
-                | "config"
-                | "grep"
-                | "ls-tree"
-                | "cat-file"
-                | "show-ref"
-                | "for-each-ref"
-                | "rev-list"
-        )
-    )
-    .then_some(remaining)
+    // `tag` and `clean` only read in their listing and dry-run spellings. The
+    // spellings that write a ref or delete a file are ordinary Git operations
+    // that keep their own permission decision: calling them inspections hands
+    // them the read floor, and a configuration probe that cannot clear itself
+    // then escalates a `git clean -fdx` the user had already allowed.
+    let inspects = match remaining.first().map(String::as_str) {
+        Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
+        Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
+        operation => matches!(
+            operation,
+            Some(
+                "status"
+                    | "diff"
+                    | "log"
+                    | "show"
+                    | "branch"
+                    | "hash-object"
+                    | "rev-parse"
+                    | "merge-base"
+                    | "ls-files"
+                    | "remote"
+                    | "worktree"
+                    | "config"
+                    | "grep"
+                    | "ls-tree"
+                    | "cat-file"
+                    | "show-ref"
+                    | "for-each-ref"
+                    | "rev-list"
+            )
+        ),
+    };
+    inspects.then_some(remaining)
 }
 
 pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {
